@@ -1757,8 +1757,8 @@ class AdvancedSubtitleProcessor:
     def __init__(self):
         self.check_ffmpeg()
         # 🔧 v4.2 ИСПРАВЛЕНИЕ: Изолированные модели Whisper для предотвращения рассинхрона
+        # Модель теперь загружается заново для каждого видео
         self._whisper_model = None
-        self._last_model_language = None
     
     def check_ffmpeg(self):
         """Проверка FFmpeg"""
@@ -1823,22 +1823,16 @@ class AdvancedSubtitleProcessor:
         return 'en'
     
     def _get_whisper_model(self, language: str):
-        """🔧 v4.2 ИСПРАВЛЕНИЕ: Получение модели Whisper с учетом языка"""
-        # Если язык изменился, перезагружаем модель для предотвращения рассинхрона
-        if self._whisper_model is None or self._last_model_language != language:
-            logger.info(f"🔄 v4.2: Loading Whisper model for language: {language}")
-            
-            # Очищаем предыдущую модель
-            if self._whisper_model is not None:
-                del self._whisper_model
-                gc.collect()
-            
-            # Загружаем новую модель
-            self._whisper_model = whisper.load_model("base")
-            self._last_model_language = language
-            
-            logger.info(f"✅ v4.2: Whisper model loaded for {language}")
-        
+        """Загрузка новой модели Whisper для указанного языка"""
+        logger.info(f"🔄 Loading fresh Whisper model for language: {language}")
+
+        if self._whisper_model is not None:
+            del self._whisper_model
+            gc.collect()
+
+        self._whisper_model = whisper.load_model("base")
+        logger.info(f"✅ Whisper model loaded for {language}")
+
         return self._whisper_model
     
     def find_subtitle_files(self, subtitles_folder: Path):
@@ -2273,9 +2267,12 @@ class EnhancedVideoProductionPipeline:
         """🔧 v4.2 РАСШИРЕННАЯ обработка одной папки с продвинутыми эффектами"""
         folder_name = video_folder.name
         tracker = ModernProgressTracker(self.progress_callback)
-        
+
         # 🔧 v4.2 ИСПРАВЛЕНИЕ: Увеличиваем счетчик видео для принудительной рандомизации
         self._video_counter += 1
+
+        # Для каждой папки сбрасываем модель Whisper
+        self.subtitle_processor._whisper_model = None
         
         try:
             logger.info(f"🚀 ENHANCED PROCESSING v4.2: {folder_name} (#{self._video_counter})")
