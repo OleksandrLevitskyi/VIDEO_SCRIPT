@@ -1292,6 +1292,8 @@ class SmartVideoMerger:
                 '-ac', '2',
                 '-map', '0:v',
                 '-map', '1:a',
+                '-avoid_negative_ts', 'make_zero',
+                '-async', '1',
                 '-shortest',
                 '-y', str(output_file)
             ]
