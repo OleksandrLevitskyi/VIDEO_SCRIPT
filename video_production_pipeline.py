@@ -412,6 +412,7 @@ class PrecisionVideoMerger:
             'ffmpeg', '-i', str(video_file), '-i', str(audio_file),
             '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
             '-map', '0:v:0', '-map', '1:a:0',
+            '-shortest',  # гарантирует совпадение длительностей
             '-avoid_negative_ts', 'make_zero',
             '-async', '1',  # улучшенная синхронизация
             '-y', str(output_file)
