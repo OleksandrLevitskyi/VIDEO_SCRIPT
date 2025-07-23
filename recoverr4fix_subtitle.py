@@ -2367,53 +2367,30 @@ class EnhancedVideoProductionPipeline:
             logger.info(f"📝 v4.2: Text preview: {text_content[:100]}...")
             
             try:
-                try:
-                    existing_loop = asyncio.get_event_loop()
-                    if existing_loop and not existing_loop.is_closed():
-                        existing_loop.close()
-                except:
-                    pass
-                
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
-                result = loop.run_until_complete(
+                asyncio.run(
                     asyncio.wait_for(
                         self.tts_processor.text_to_speech(text_content, voice_file, config, tracker),
                         timeout=600
                     )
                 )
-                
-                if not result or not voice_file.exists():
+
+                if not voice_file.exists():
                     logger.error(f"❌ TTS failed for {folder_name}")
                     return False
-                
+
                 file_size = voice_file.stat().st_size
                 if file_size < 2000:
                     logger.error(f"❌ Generated audio file too small: {file_size} bytes")
                     return False
-                
+
                 logger.info(f"✅ Enhanced TTS v4.2 successful: {file_size} bytes ({detected_language})")
-                
+
             except asyncio.TimeoutError:
                 logger.error(f"❌ TTS timeout for {folder_name}")
                 return False
             except Exception as e:
                 logger.error(f"❌ TTS error for {folder_name}: {e}")
                 return False
-            finally:
-                try:
-                    if loop and not loop.is_closed():
-                        pending = asyncio.all_tasks(loop)
-                        for task in pending:
-                            task.cancel()
-                        
-                        if pending:
-                            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-                        
-                        loop.close()
-                except Exception as e:
-                    logger.warning(f"⚠️ Error closing event loop: {e}")
             
             audio_duration = self.video_merger.get_video_duration(voice_file)
             if audio_duration <= 0:
