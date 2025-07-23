@@ -1756,9 +1756,7 @@ class AdvancedSubtitleProcessor:
     
     def __init__(self):
         self.check_ffmpeg()
-        # 🔧 v4.2 ИСПРАВЛЕНИЕ: Изолированные модели Whisper для предотвращения рассинхрона
-        # Модель теперь загружается заново для каждого видео
-        self._whisper_model = None
+        # Модель Whisper будет загружаться отдельно для каждого видео
     
     def check_ffmpeg(self):
         """Проверка FFmpeg"""
@@ -1822,18 +1820,11 @@ class AdvancedSubtitleProcessor:
         
         return 'en'
     
-    def _get_whisper_model(self, language: str):
-        """Загрузка новой модели Whisper для указанного языка"""
-        logger.info(f"🔄 Loading fresh Whisper model for language: {language}")
-
-        if self._whisper_model is not None:
-            del self._whisper_model
-            gc.collect()
-
-        self._whisper_model = whisper.load_model("base")
-        logger.info(f"✅ Whisper model loaded for {language}")
-
-        return self._whisper_model
+    def _get_whisper_model(self):
+        """Загрузка новой модели Whisper"""
+        logger.info("🔄 Loading Whisper model")
+        gc.collect()
+        return whisper.load_model("base")
     
     def find_subtitle_files(self, subtitles_folder: Path):
         """Поиск всех файлов субтитров"""
@@ -1916,71 +1907,25 @@ class AdvancedSubtitleProcessor:
             return False
     
     def generate_styled_subtitles(self, audio_file: Path, subtitle_file: Path, config: dict, progress_tracker: ModernProgressTracker = None, text_content: str = None):
-        """🔧 v4.2 ИСПРАВЛЕННАЯ: Генерация стилизованных субтитров с правильным определением языка"""
+        """Генерация стилизованных субтитров"""
         try:
             if progress_tracker:
-                progress_tracker.update_progress(10, "Loading Whisper model v4.2")
-            
-            # 🔧 v4.2 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Определяем язык из текста, а не из папки
-            if text_content:
-                detected_language = self.detect_language(text_content)
-                logger.info(f"🔍 v4.2: Language detected from TEXT: {detected_language}")
-            else:
-                # Fallback - пытаемся прочитать текст из того же видео
-                try:
-                    text_folder = audio_file.parent.parent / 'text'
-                    text_files = list(text_folder.glob('*.txt'))
-                    if text_files:
-                        with open(text_files[0], 'r', encoding='utf-8') as f:
-                            text_content = f.read().strip()
-                        detected_language = self.detect_language(text_content)
-                        logger.info(f"🔍 v4.2: Language detected from TEXT FILE: {detected_language}")
-                    else:
-                        logger.warning("⚠️ No text file found, defaulting to English")
-                        detected_language = 'en'
-                except Exception as e:
-                    logger.error(f"❌ Error reading text file: {e}")
-                    detected_language = 'en'
-            
-            # 🔧 v4.2: Получаем правильную модель для обнаруженного языка
-            model = self._get_whisper_model(detected_language)
-            
+                progress_tracker.update_progress(10, "Loading Whisper model")
+
+            model = self._get_whisper_model()
+
             if progress_tracker:
-                progress_tracker.update_progress(30, f"Transcribing audio (detected: {detected_language})")
-            
-            # 🔧 v4.2 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Принудительно указываем обнаруженный язык
-            logger.info(f"🎤 v4.2: Transcribing with FORCED language: {detected_language}")
-            
+                progress_tracker.update_progress(30, "Transcribing audio")
+
             result = model.transcribe(
-                str(audio_file), 
-                fp16=False, 
+                str(audio_file),
+                fp16=False,
                 verbose=False,
-                word_timestamps=True,
-                language=detected_language,  # 🔧 v4.2: ПРИНУДИТЕЛЬНО указываем язык
-                task='transcribe'  # 🔧 v4.2: Явно указываем задачу транскрипции
+                word_timestamps=True
             )
-            
-            # 🔧 v4.2: Проверяем что транскрипция соответствует ожидаемому языку
-            transcribed_text = " ".join([segment['text'] for segment in result['segments']])
-            transcribed_language = self.detect_language(transcribed_text)
-            
-            if transcribed_language != detected_language:
-                logger.warning(f"⚠️ v4.2: Language mismatch! Expected: {detected_language}, Got: {transcribed_language}")
-                logger.info(f"🔄 v4.2: Re-transcribing with corrected language: {transcribed_language}")
-                
-                # Повторная транскрипция с правильным языком
-                result = model.transcribe(
-                    str(audio_file), 
-                    fp16=False, 
-                    verbose=False,
-                    word_timestamps=True,
-                    language=transcribed_language,
-                    task='transcribe'
-                )
-                detected_language = transcribed_language
-            
+
             if progress_tracker:
-                progress_tracker.update_progress(70, "Creating styled subtitles v4.2")
+                progress_tracker.update_progress(70, "Creating styled subtitles")
             
             subtitle_preset_key = config.get('subtitle_preset', 'poppins_extra_bold')
             subtitle_preset = SUBTITLE_PRESETS[subtitle_preset_key]
@@ -1994,10 +1939,11 @@ class AdvancedSubtitleProcessor:
                 f.write(ass_content)
             
             if progress_tracker:
-                progress_tracker.update_progress(100, f"Styled subtitles v4.2: {subtitle_preset['name']} ({detected_language})")
-            
-            logger.info(f"✅ v4.2: Subtitles generated with CORRECT language: {detected_language}")
-            logger.info(f"📝 First segment preview: {result['segments'][0]['text'][:50] if result['segments'] else 'No segments'}")
+                progress_tracker.update_progress(100, f"Styled subtitles: {subtitle_preset['name']}")
+
+            logger.info("✅ Subtitles generated")
+            if result['segments']:
+                logger.info(f"📝 First segment preview: {result['segments'][0]['text'][:50]}")
             return True
             
         except Exception as e:
@@ -2271,8 +2217,6 @@ class EnhancedVideoProductionPipeline:
         # 🔧 v4.2 ИСПРАВЛЕНИЕ: Увеличиваем счетчик видео для принудительной рандомизации
         self._video_counter += 1
 
-        # Для каждой папки сбрасываем модель Whisper
-        self.subtitle_processor._whisper_model = None
         
         try:
             logger.info(f"🚀 ENHANCED PROCESSING v4.2: {folder_name} (#{self._video_counter})")
