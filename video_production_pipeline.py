@@ -709,14 +709,10 @@ class UltimateVideoProductionPipeline:
             with open(text_file, 'r', encoding='utf-8') as f:
                 text_content = f.read().strip()
             
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(
-                    self.tts_processor.text_to_speech(text_content, voice_file, config)
-                )
-            finally:
-                loop.close()
+            # Use asyncio.run to ensure event loop is properly managed
+            asyncio.run(
+                self.tts_processor.text_to_speech(text_content, voice_file, config)
+            )
             
             # Получаем длительность озвучки
             audio_duration = self.get_audio_duration(voice_file)
